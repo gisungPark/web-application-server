@@ -14,7 +14,7 @@ public class HttpRequest {
 
     private String url;
     private Map<String, String> header = new HashMap<>();
-
+    private Map<String, String> params = new HashMap<>();
 
     @Override
     public String toString() {
