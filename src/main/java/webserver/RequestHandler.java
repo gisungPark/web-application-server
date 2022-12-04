@@ -1,12 +1,12 @@
 package webserver;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import util.HttpRequest;
+
 import java.io.*;
 import java.net.Socket;
 import java.nio.file.Files;
-import java.nio.file.Paths;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
@@ -24,19 +24,9 @@ public class RequestHandler extends Thread {
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
             // TODO 사용자 요청에 대한 처리는 이 곳에 구현하면 된다.
 
-            String URI = extractedURI(in);
-            log.debug("Call URI : {}", URI);
-            byte[] body = null;
-            switch (URI) {
-                case "/index":
-                    body = Files.readAllBytes(Paths.get("./webapp" + URI + ".html"));
-                    break;
+            HttpRequest request = readReqInfo(in);
 
-                default:
-                    body = "Hello World".getBytes();
-                    break;
-            }
-
+            byte[] body = Files.readAllBytes(new File("./webapp" + request.getUrl()).toPath());
             DataOutputStream dos = new DataOutputStream(out);
             response200Header(dos, body.length);
             responseBody(dos, body);
@@ -46,17 +36,38 @@ public class RequestHandler extends Thread {
         }
     }
 
-    private String extractedURI(InputStream in) throws IOException {
+    private HttpRequest readReqInfo(InputStream in) throws IOException {
+        HttpRequest request = new HttpRequest();
         BufferedReader br = new BufferedReader(new InputStreamReader(in));
-        String[] info = br.readLine().split(" ");
+        String line = br.readLine();
 
-//            while(true){
-//                String line = br.readLine();
-//                if("".equals(line) || line == null) break;
-//
-//                System.out.println(line);
-//            }
-        return info[1] != null ? info[1] : " ";
+        if (line == null) {
+            request.setUrl("/index.html");
+            return request;
+        }
+
+        String[] tokens = line.split(" ");
+        request.setUrl(isBlank(tokens[1]) ? "/index.html" : tokens[1]);
+
+        while (!"".equals(line)) {
+            if (line.contains("Content-Length")) {
+                request.getHeader().put("Content-Length", line);
+                log.debug("Content-Length : {}", line);
+            }
+
+            if (line.contains("Cookie")) {
+                request.getHeader().put("Cookie", line);
+                log.debug("Cookie : {}", line);
+            }
+            line = br.readLine();
+        }
+
+        log.debug(request.toString());
+        return request;
+    }
+
+    private boolean isBlank(String url) {
+        return url == null || url.isEmpty() || "/".equals(url);
     }
 
     private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
