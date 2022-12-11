@@ -1,10 +1,12 @@
 package webserver;
 
+import db.DataBase;
 import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import util.HttpRequest;
 import util.HttpRequestUtils;
+import util.IOUtils;
 
 import java.io.*;
 import java.net.Socket;
@@ -25,79 +27,72 @@ public class RequestHandler extends Thread {
                 connection.getPort());
 
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
-            // TODO 사용자 요청에 대한 처리는 이 곳에 구현하면 된다.
 
-            HttpRequest request = readReqInfo(in);
+            BufferedReader br = new BufferedReader(new InputStreamReader(in));
+            String line = br.readLine();
 
-            if( "/user/create".equals(request.getUrl())){
-                Map<String, String> params = request.getParams();
-                User newUser = User.builder()
-                        .userId(params.get("userId"))
-                        .name(params.get("name"))
-                        .email(params.get("email"))
-                        .password(params.get("password"))
-                        .build();
-                System.out.println(newUser.toString());
+            if(line == null) return;
+
+            String[] tokens = line.split(" ");
+            int contentLength = 0;
+
+            while (!"".equals(line)) {
+                if (line.contains("Content-Length")) {
+                    contentLength = getContentLength(line);
+                }
+                if (line.contains("Cookie")) {
+                    System.out.println(line);
+                }
+                line = br.readLine();
             }
 
+            String url = getDefaultUrl(tokens);
 
-            byte[] body = Files.readAllBytes(new File("./webapp" + request.getUrl()).toPath());
-            DataOutputStream dos = new DataOutputStream(out);
-            response200Header(dos, body.length);
-            responseBody(dos, body);
+            if ("/user/create".equals(url)) {
+                String body = IOUtils.readData(br, contentLength);
+                Map<String, String> params = HttpRequestUtils.parseQueryString(body);
+                User user = new User(params.get("userId"), params.get("password"), params.get("name"),
+                        params.get("email"));
+                DataBase.addUser(user);
+                log.debug("user : {}", user);
 
+                DataOutputStream dos = new DataOutputStream(out);
+                response302Header(dos);
+            } else {
+                byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
+                DataOutputStream dos = new DataOutputStream(out);
+                response200Header(dos, body.length);
+                responseBody(dos, body);
+            }
         } catch (IOException e) {
             log.error(e.getMessage());
         }
     }
 
-    private HttpRequest readReqInfo(InputStream in) throws IOException {
-        HttpRequest request = new HttpRequest();
-        BufferedReader br = new BufferedReader(new InputStreamReader(in));
-        String line = br.readLine();
+    private boolean isUser(User user, String password) {
 
-        if (line == null) {
-            request.setUrl("/index.html");
-            return request;
-        }
-
-        String[] tokens = line.split(" ");
-        separateUrl(request, tokens[1]);
-
-        while (!"".equals(line)) {
-            if (line.contains("Content-Length")) {
-                request.getHeader().put("Content-Length", line);
-                log.debug("Content-Length : {}", line);
-            }
-
-            if (line.contains("Cookie")) {
-                request.getHeader().put("Cookie", line);
-                log.debug("Cookie : {}", line);
-            }
-            line = br.readLine();
-        }
-        return request;
+        if(password.equals(user.getPassword())) return true;
+        return false;
     }
 
-    private void separateUrl(HttpRequest req, String exp) {
-        if (isBlank(exp)) {
-            req.setUrl("/index.html");
-            return;
-        }
 
-        String requestPath = exp;
-
-        if(exp.contains("?")){
-            int idx = exp.indexOf('?');
-            requestPath = exp.substring(0, idx);
-            req.setParams(HttpRequestUtils.parseQueryString(exp.substring(idx + 1)));
-        }
-
-        req.setUrl(isBlank(requestPath) ? "/index.html" : requestPath);
+    private String getDefaultUrl(String[] tokens) {
+        if(tokens.length < 1 || "/".equals(tokens[1])) return "/index.html";
+        return tokens[1];
     }
 
-    private boolean isBlank(String url) {
-        return url == null || url.isEmpty() || "/".equals(url);
+    private int getContentLength(String line) {
+        String[] split = line.split(":");
+        return Integer.valueOf(split[1].trim());
+    }
+
+    private void response302Header(DataOutputStream dos) {
+        try {
+            dos.writeBytes("HTTP/1.1 302 Redirect \r\n");
+            dos.writeBytes("Location: /index.html \r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
     }
 
     private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
