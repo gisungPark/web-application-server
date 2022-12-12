@@ -58,12 +58,53 @@ public class RequestHandler extends Thread {
 
                 DataOutputStream dos = new DataOutputStream(out);
                 response302Header(dos);
+            } else if ("/user/login".equals(url)) {
+                String body = IOUtils.readData(br, contentLength);
+                Map<String, String> params = HttpRequestUtils.parseQueryString(body);
+
+                User findUser = DataBase.findUserById(params.get("userId"));
+
+                if(findUser != null) {
+                    if (findUser.login(params.get("password"))) {
+                        DataOutputStream dos = new DataOutputStream(out);
+                        loginSuccessHeader(dos);
+
+                    } else {
+                        DataOutputStream dos = new DataOutputStream(out);
+                        loginFailHeader(dos);
+                    }
+                }else{
+                    DataOutputStream dos = new DataOutputStream(out);
+                    loginFailHeader(dos);
+                }
+
+
             } else {
                 byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
                 DataOutputStream dos = new DataOutputStream(out);
                 response200Header(dos, body.length);
                 responseBody(dos, body);
             }
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void loginFailHeader(DataOutputStream dos) {
+        try {
+            dos.writeBytes("HTTP/1.1 401 Unauthorized \r\n");
+            dos.writeBytes("Content-Type: text/html \r\n");
+            dos.writeBytes("Set-Cookie: logined=false \r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void loginSuccessHeader(DataOutputStream dos) {
+        try {
+            dos.writeBytes("HTTP/1.1 200 OK \r\n");
+            dos.writeBytes("Content-Type: text/html \r\n");
+            dos.writeBytes("Set-Cookie: logined=true \r\n");
         } catch (IOException e) {
             log.error(e.getMessage());
         }

@@ -18,6 +18,12 @@ public class User {
         this.email = email;
     }
 
+    public boolean login(String password){
+
+        if(password.equals(getPassword())) return true;
+        return false;
+    }
+
     @Override
     public String toString() {
         return "User [userId=" + userId + ", password=" + password + ", name=" + name + ", email=" + email + "]";
