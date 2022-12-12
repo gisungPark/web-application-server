@@ -71,6 +71,7 @@ public class RequestHandler extends Thread {
 
                 if (findUser != null && findUser.login(params.get("password"))) {
                         loginSuccessResource(out);
+                        return;
                 }
                 responseResource(out, "/user/login_failed.html");
 
@@ -98,9 +99,51 @@ public class RequestHandler extends Thread {
                 response200Header(dos, body.length);
                 responseBody(dos, body);
 
+            } else if (url.endsWith(".css")){
+                responseCssResource(out, url);
+            } else if (url.endsWith(".js")){
+                responseJsResource(out, url);
             } else {
+
+                System.out.println(url);
                 responseResource(out, "/user/login.html");
             }
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void responseJsResource(OutputStream out, String url) throws IOException {
+        byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
+        DataOutputStream dos = new DataOutputStream(out);
+        responseJsHeader(dos, body.length);
+        responseBody(dos, body);
+    }
+
+    private void responseJsHeader(DataOutputStream dos, int length) {
+        try {
+            dos.writeBytes("HTTP/1.1 200 OK \r\n");
+            dos.writeBytes("Content-Type: text/javascript;charset=utf-8\r\n");
+            dos.writeBytes("Content-Length: " + length + "\r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void responseCssResource(OutputStream out, String url) throws IOException {
+        byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
+        DataOutputStream dos = new DataOutputStream(out);
+        responseCssHeader(dos, body.length);
+        responseBody(dos, body);
+    }
+
+    private void responseCssHeader(DataOutputStream dos, int length) {
+        try {
+            dos.writeBytes("HTTP/1.1 200 OK \r\n");
+            dos.writeBytes("Content-Type: text/css;charset=utf-8\r\n");
+            dos.writeBytes("Content-Length: " + length + "\r\n");
+            dos.writeBytes("\r\n");
         } catch (IOException e) {
             log.error(e.getMessage());
         }
@@ -119,20 +162,6 @@ public class RequestHandler extends Thread {
 
         if(Strings.isNullOrEmpty(logined) || "false".equals(logined)) return false;
         return true;
-    }
-
-    private void loginFailResource(OutputStream out) {
-        try {
-            DataOutputStream dos = new DataOutputStream(out);
-            dos.writeBytes("HTTP/1.1 401 Unauthorized \r\n");
-            dos.writeBytes("Content-Type: text/html \r\n");
-            dos.writeBytes("Set-Cookie: logined=false \r\n");
-
-            byte[] body = Files.readAllBytes(new File("./webapp" + "/user/login_failed.html").toPath());
-            responseBody(dos, body);
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
     }
 
     private void loginSuccessResource(OutputStream out) {
